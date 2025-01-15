@@ -1,0 +1,18 @@
+[package]
+name = "utracker_launcher"
+
+edition.workspace = true
+authors.workspace = true
+version.workspace = true
+rust-version.workspace = true
+license.workspace = true
+readme.workspace = true
+repository.workspace = true
+
+[dependencies]
+thiserror =             { version = "2.0.11",   default-features = false,   features = ["std"] }
+dialoguer =             { version = "0.11.0",   default-features = false }
+
+serde =                 { version = "1.0.217",  default-features = false,   features = ["std", "derive"] }
+serde_yml =             { version = "0.0.12",   default-features = false }
+toml =                  { version = "0.8.19",   default-features = false,   features = ["parse"]}
