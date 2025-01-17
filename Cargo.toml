@@ -6,7 +6,7 @@ default-members = ["utracker_launcher"]
 [workspace.package]
 edition = "2021"
 authors = ["Ruttie"]
-version = "0.1.0"
+version = "0.1.1"
 rust-version = "1.81.0"
 license = "ISC"
 readme = "README.md"
