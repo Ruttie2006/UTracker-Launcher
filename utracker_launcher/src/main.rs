@@ -24,6 +24,10 @@ fn main() {
 
     let program_loc = location.join(consts::LAUNCHER_NAME);
 
+    if !program_loc.exists() {
+        crate::error::Error::Validation(crate::error::ValidationError::NoArchipelago).consume();
+    }
+
     for user in players {
         info!("Running user {}", user);
 
