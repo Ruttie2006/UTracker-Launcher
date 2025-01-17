@@ -1,17 +1,23 @@
 use std::{
     env::current_dir,
     fs::{self, OpenOptions},
+    num::NonZeroU16,
     path::{Path, PathBuf},
 };
 
-use dialoguer::Input;
+use dialoguer::{Input, MultiSelect};
 use serde::Deserialize;
 
-use crate::{consts, error::Error, player::PlayerFile};
+use crate::{
+    consts,
+    error::{Error, ValidationError},
+    player::PlayerFile,
+    warn,
+};
 
 pub struct Args {
     pub location: PathBuf,
-    pub port: u16,
+    pub port: NonZeroU16,
     pub host: String,
     pub players: Vec<String>,
 }
@@ -22,7 +28,7 @@ struct ConfigArgs {
     #[serde(default)]
     location: Option<PathBuf>,
     #[serde(default)]
-    port: Option<u16>,
+    port: Option<NonZeroU16>,
     #[serde(default)]
     host: Option<String>,
 }
@@ -57,14 +63,14 @@ impl Args {
     }
 
     fn prompt_location() -> crate::Result<String> {
-        Ok(Input::new()
+        Ok(Input::with_theme(&**consts::THEME)
             .default(current_dir()?.to_string_lossy().to_string())
             .with_prompt(consts::LOC_PROMPT)
             .interact_text()?)
     }
 
-    fn prompt_port() -> crate::Result<u16> {
-        Ok(Input::new()
+    fn prompt_port() -> crate::Result<NonZeroU16> {
+        Ok(Input::with_theme(&**consts::THEME)
             .allow_empty(false)
             .with_prompt(consts::PORT_PROMPT)
             .interact_text()?)
@@ -74,7 +80,7 @@ impl Args {
         let players = Self::find_players(path)?;
 
         if players.is_empty() {
-            return Err(Error::NoPlayers);
+            return Err(Error::Validation(ValidationError::NoPlayers));
         }
 
         if players.len() == 1 {
@@ -82,7 +88,8 @@ impl Args {
         }
 
         loop {
-            let mut diag = dialoguer::MultiSelect::new().with_prompt(consts::PLAYERS_PROMPT);
+            let mut diag =
+                MultiSelect::with_theme(&**consts::THEME).with_prompt(consts::PLAYERS_PROMPT);
 
             for i in &players {
                 diag = diag.item(&i.name);
@@ -91,7 +98,7 @@ impl Args {
             let res = diag.interact()?;
 
             if res.is_empty() {
-                println!("You need to select at least one player, please try again!");
+                warn!("You need to select at least one player, please try again!");
                 continue;
             }
 
@@ -107,6 +114,10 @@ impl Args {
     fn find_players(path: impl AsRef<Path>) -> crate::Result<Vec<PlayerFile>> {
         let mut found: Vec<PlayerFile> = Vec::new();
 
+        if !std::fs::exists(&path)? {
+            return Err(Error::Validation(ValidationError::NoPlayerDir));
+        }
+
         for i in std::fs::read_dir(path)? {
             let i = match i {
                 Ok(val)
@@ -121,8 +132,28 @@ impl Args {
                 _ => continue,
             };
 
-            let read = OpenOptions::new().read(true).open(i.path())?;
-            let val = serde_yml::from_reader(read)?;
+            let read = match OpenOptions::new().read(true).open(i.path()) {
+                Ok(val) => val,
+                Err(err) => {
+                    warn!(
+                        "Failed to open the file '{}': {}",
+                        i.path().to_string_lossy(),
+                        err
+                    );
+                    continue;
+                }
+            };
+            let val = match serde_yml::from_reader(read) {
+                Ok(val) => val,
+                Err(err) => {
+                    warn!(
+                        "Failed to parse the file '{}': {}",
+                        i.path().to_string_lossy(),
+                        err
+                    );
+                    continue;
+                }
+            };
 
             found.push(val);
         }
