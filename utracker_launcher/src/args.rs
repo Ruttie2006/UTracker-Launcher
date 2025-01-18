@@ -6,6 +6,7 @@ use std::{
 };
 
 use dialoguer::{Input, MultiSelect};
+use rayon::iter::{IntoParallelIterator, ParallelIterator};
 use serde::Deserialize;
 use yaml_rust2::{Yaml, YamlLoader};
 
@@ -79,93 +80,89 @@ impl Args {
     fn prompt_users(path: impl AsRef<Path>) -> crate::Result<Vec<String>> {
         let players = Self::find_players(path)?;
 
-        if players.is_empty() {
-            return Err(Error::Validation(ValidationError::NoPlayers));
-        }
+        match players.len() {
+            0 => Err(Error::Validation(ValidationError::NoPlayers)),
+            1 => Ok(players),
+            _ => loop {
+                let res = MultiSelect::with_theme(&**consts::THEME)
+                    .with_prompt(consts::PLAYERS_PROMPT)
+                    .items(&players)
+                    .interact()?;
 
-        if players.len() == 1 {
-            return Ok(players.into_iter().collect());
-        }
+                if res.is_empty() {
+                    warn!("You need to select at least one player, please try again!");
+                    continue;
+                }
 
-        loop {
-            let mut diag =
-                MultiSelect::with_theme(&**consts::THEME).with_prompt(consts::PLAYERS_PROMPT);
-
-            for i in &players {
-                diag = diag.item(i);
-            }
-
-            let res = diag.interact()?;
-
-            if res.is_empty() {
-                warn!("You need to select at least one player, please try again!");
-                continue;
-            }
-
-            let mut vec = Vec::with_capacity(res.len());
-            for i in res {
-                vec.push(players[i].clone());
-            }
-
-            return Ok(vec);
+                return Ok(res.into_iter().map(|i| players[i].clone()).collect());
+            },
         }
     }
 
     fn find_players(path: impl AsRef<Path>) -> crate::Result<Vec<String>> {
-        let mut found: Vec<String> = Vec::new();
-
-        if !std::fs::exists(&path)? {
+        if !path.as_ref().exists() {
             return Err(Error::Validation(ValidationError::NoPlayerDir));
         }
 
-        for i in std::fs::read_dir(path)? {
-            let i = match i {
-                Ok(val)
+        let files: Vec<_> = fs::read_dir(path)?
+            .filter_map(|f| {
+                if let Ok(val) = f {
                     if val.file_type().is_ok_and(|f| f.is_file())
                         && val
                             .path()
                             .extension()
-                            .is_some_and(|f| f == consts::YAML_EXT) =>
-                {
-                    val
+                            .is_some_and(|f| f == consts::YAML_EXT)
+                    {
+                        Some(val.path())
+                    } else {
+                        None
+                    }
+                } else {
+                    None
                 }
-                _ => continue,
-            };
+            })
+            .collect();
 
-            let str = fs::read_to_string(i.path())?;
+        let found: Vec<_> = files
+            .into_par_iter()
+            .filter_map(|path| {
+                let str = fs::read_to_string(&path)
+                    .map_err(|err| {
+                        warn!(
+                            "Failed to read the file '{}': {}",
+                            path.to_string_lossy(),
+                            err
+                        );
+                    })
+                    .ok()?;
 
-            let yaml = match YamlLoader::load_from_str(
-                str.trim_start_matches(['\u{feff}']).trim_start(), // remove BOM
-            ) {
-                Ok(val) => val,
-                Err(err) => {
+                let yaml = YamlLoader::load_from_str(
+                    str.trim_start_matches(consts::BOM).trim_start(), // remove BOM
+                )
+                .map_err(|err| {
                     warn!(
                         "Failed to parse the file '{}': {}",
-                        i.path().to_string_lossy(),
+                        path.to_string_lossy(),
                         err
                     );
-                    continue;
-                }
-            };
+                })
+                .ok()?;
 
-            for doc in yaml {
-                let name = match doc
-                    .as_hash()
-                    .unwrap()
-                    .get(&Yaml::String(String::from("name")))
-                {
-                    Some(Yaml::String(val)) => val,
-                    _ => {
-                        warn!(
-                            "No 'name' string field in player file {}",
-                            i.path().to_string_lossy()
-                        );
-                        continue;
-                    }
-                };
-                found.push(name.to_owned());
-            }
-        }
+                Some(yaml.into_par_iter().filter_map(move |doc| {
+                    doc.as_hash()
+                        .and_then(|f| f.get(&Yaml::String(String::from("name"))))
+                        .and_then(|f| f.as_str().map(|f| f.to_owned()))
+                        .or_else(|| {
+                            warn!(
+                                "No 'name' string field in player file {}",
+                                path.to_string_lossy()
+                            );
+                            None
+                        })
+                }))
+            })
+            .flatten()
+            .collect();
 
         Ok(found)
     }

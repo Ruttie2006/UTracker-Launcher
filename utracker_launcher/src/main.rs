@@ -1,6 +1,13 @@
-#![warn(clippy::print_stdout, clippy::print_stderr)]
+#![deny(
+    clippy::print_stdout,
+    clippy::print_stderr,
+    clippy::unwrap_used,
+    clippy::expect_used,
+    unsafe_code
+)]
 
 use args::Args;
+use rayon::iter::{IntoParallelIterator, ParallelIterator};
 use std::process::Command;
 
 pub(crate) mod args;
@@ -27,20 +34,26 @@ fn main() {
         crate::error::Error::Validation(crate::error::ValidationError::NoArchipelago).consume();
     }
 
-    for user in players {
+    let url = format!("{}:{}", host, port);
+
+    players.into_par_iter().for_each(|user| {
         info!("Running user {}", user);
 
-        let mut cmd = Command::new(program_loc.clone());
-        cmd.arg(consts::TRACKER_ARG)
+        if let Err(err) = match Command::new(&program_loc)
+            .arg(consts::TRACKER_ARG)
             .arg("--")
             .arg("--name")
-            .arg(user)
+            .arg(&user)
             .arg("--connect")
-            .arg(format!("{}:{}", host, port))
-            .current_dir(location.clone());
-
-        if let Err(err) = cmd.spawn() {
-            warn!("Failed to run user: {}", err);
+            .arg(&url)
+            .current_dir(&location)
+            .spawn()
+            .map(|mut f| f.wait())
+        {
+            Ok(inner) => inner, // required due to `result_flattening` not being stable yet
+            Err(err) => Err(err),
+        } {
+            warn!("Failed to run user '{}': {}", user, err);
         }
-    }
+    });
 }

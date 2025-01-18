@@ -15,14 +15,9 @@ pub const CONFIG_FILE: &str = "config.toml";
 pub const DEFAULT_HOST: &str = "archipelago.gg";
 pub const YAML_EXT: &str = "yaml";
 pub const PLAYERS_DIR: &str = "Players";
+pub const BOM: char = '\u{FEFF}';
 
 pub static HAS_ANSI: Lazy<bool> =
     Lazy::new(|| ::supports_color::on(::supports_color::Stream::Stderr).is_some_and(|f| f.has_256));
 pub static THEME: Lazy<Box<dyn dialoguer::theme::Theme + 'static + Send + Sync>> =
-    Lazy::new(|| {
-        if *HAS_ANSI {
-            Box::new(dialoguer::theme::ColorfulTheme::default())
-        } else {
-            Box::new(dialoguer::theme::SimpleTheme)
-        }
-    });
+    Lazy::new(|| Box::new(dialoguer::theme::ColorfulTheme::default()));

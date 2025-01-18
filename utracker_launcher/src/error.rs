@@ -21,7 +21,7 @@ pub enum ValidationError {
     NoPlayerDir,
     #[error("Found no players, please make sure at least one player is present")]
     NoPlayers,
-    #[error("Could not find the {0} file", crate::consts::LAUNCHER_NAME)]
+    #[error("Could not find the '{0}' file", crate::consts::LAUNCHER_NAME)]
     NoArchipelago,
 }
 

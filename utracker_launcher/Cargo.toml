@@ -10,11 +10,16 @@ readme.workspace = true
 repository.workspace = true
 
 [dependencies]
-thiserror =             { version = "2.0.11",   default-features = false,   features = ["std"] }
+# Console
 dialoguer =             { version = "0.11.0",   default-features = false }
 supports-color =        { version = "3.0.2",    default-features = false }
-once_cell =             { version = "1.20.2",   default-features = false,   features = ["std"] }
 
+# Utility
+thiserror =             { version = "2.0.11",   default-features = false,   features = ["std"] }
+once_cell =             { version = "1.20.2",   default-features = false,   features = ["std"] }
+rayon =                 { version = "1.10.0",   default-features = false }
+
+# Parsing
 serde =                 { version = "1.0.217",  default-features = false,   features = ["std", "derive"] }
 yaml-rust2 =            { version = "0.9.0",    default-features = false,   features = ["encoding"] }
 toml =                  { version = "0.8.19",   default-features = false,   features = ["parse"]}
