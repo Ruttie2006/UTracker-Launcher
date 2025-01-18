@@ -7,7 +7,6 @@ pub(crate) mod args;
 pub(crate) mod consts;
 pub(crate) mod error;
 pub(crate) mod macros;
-pub(crate) mod player;
 
 pub type Result<T = ()> = std::result::Result<T, error::Error>;
 

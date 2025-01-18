@@ -1,17 +1,17 @@
 use std::{
     env::current_dir,
-    fs::{self, OpenOptions},
+    fs,
     num::NonZeroU16,
     path::{Path, PathBuf},
 };
 
 use dialoguer::{Input, MultiSelect};
 use serde::Deserialize;
+use yaml_rust2::{Yaml, YamlLoader};
 
 use crate::{
     consts,
     error::{Error, ValidationError},
-    player::PlayerFile,
     warn,
 };
 
@@ -84,7 +84,7 @@ impl Args {
         }
 
         if players.len() == 1 {
-            return Ok(players.into_iter().map(|f| f.name).collect());
+            return Ok(players.into_iter().collect());
         }
 
         loop {
@@ -92,7 +92,7 @@ impl Args {
                 MultiSelect::with_theme(&**consts::THEME).with_prompt(consts::PLAYERS_PROMPT);
 
             for i in &players {
-                diag = diag.item(&i.name);
+                diag = diag.item(i);
             }
 
             let res = diag.interact()?;
@@ -104,15 +104,15 @@ impl Args {
 
             let mut vec = Vec::with_capacity(res.len());
             for i in res {
-                vec.push(players[i].name.clone());
+                vec.push(players[i].clone());
             }
 
             return Ok(vec);
         }
     }
 
-    fn find_players(path: impl AsRef<Path>) -> crate::Result<Vec<PlayerFile>> {
-        let mut found: Vec<PlayerFile> = Vec::new();
+    fn find_players(path: impl AsRef<Path>) -> crate::Result<Vec<String>> {
+        let mut found: Vec<String> = Vec::new();
 
         if !std::fs::exists(&path)? {
             return Err(Error::Validation(ValidationError::NoPlayerDir));
@@ -132,18 +132,11 @@ impl Args {
                 _ => continue,
             };
 
-            let read = match OpenOptions::new().read(true).open(i.path()) {
-                Ok(val) => val,
-                Err(err) => {
-                    warn!(
-                        "Failed to open the file '{}': {}",
-                        i.path().to_string_lossy(),
-                        err
-                    );
-                    continue;
-                }
-            };
-            let val = match serde_yml::from_reader(read) {
+            let str = fs::read_to_string(i.path())?;
+
+            let yaml = match YamlLoader::load_from_str(
+                str.trim_start_matches(['\u{feff}']).trim_start(), // remove BOM
+            ) {
                 Ok(val) => val,
                 Err(err) => {
                     warn!(
@@ -155,7 +148,23 @@ impl Args {
                 }
             };
 
-            found.push(val);
+            for doc in yaml {
+                let name = match doc
+                    .as_hash()
+                    .unwrap()
+                    .get(&Yaml::String(String::from("name")))
+                {
+                    Some(Yaml::String(val)) => val,
+                    _ => {
+                        warn!(
+                            "No 'name' string field in player file {}",
+                            i.path().to_string_lossy()
+                        );
+                        continue;
+                    }
+                };
+                found.push(name.to_owned());
+            }
         }
 
         Ok(found)
