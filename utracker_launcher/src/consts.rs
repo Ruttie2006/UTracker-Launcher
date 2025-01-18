@@ -1,6 +1,10 @@
 use once_cell::sync::Lazy;
 
+#[cfg(target_os = "windows")]
 pub const LAUNCHER_NAME: &str = "ArchipelagoLauncher.exe";
+#[cfg(target_os = "linux")]
+pub const LAUNCHER_NAME: &str = "ArchipelagoLauncher";
+
 pub const TRACKER_ARG: &str = "Universal Tracker";
 
 pub const PLAYERS_PROMPT: &str = "Choose players (select with space, confirm with enter)";
